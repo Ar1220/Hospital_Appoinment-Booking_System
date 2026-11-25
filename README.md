@@ -153,7 +153,31 @@ mysql-project/
 
 ---
 
-## 6. Verification status
+## 6. Screenshots
+
+Full-resolution captures of the running site.
+
+### Landing page
+![Landing page — "Your health. Our obsession."](screenshots/01-hero.png)
+
+### Inside Requiem — facility gallery
+![Facility record: surgical wing, observation ward, imaging suite](screenshots/02-facilities.png)
+
+### Clinical services
+![Clinical capabilities: emergency intake, precision surgery, diagnostics, specialist consults](screenshots/03-services.png)
+
+### Appointment intake form
+![Patient intake form with validation, doctor selection and available time slots](screenshots/04-appointment-form.png)
+
+### Specialists
+![Meet the specialists — clinician cards with live availability](screenshots/05-specialists.png)
+
+### Location & contact
+![Location and contact section with facility map](screenshots/06-location-contact.png)
+
+---
+
+## 7. Verification status
 
 - `tsc -p tsconfig.json --noEmit` → clean
 - `npm run build` → builds (250 kB JS / 43 kB CSS)
@@ -164,7 +188,7 @@ mysql-project/
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
