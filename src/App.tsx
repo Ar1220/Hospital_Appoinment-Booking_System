@@ -2,11 +2,13 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
+  type ReactElement,
   type SVGProps,
   useEffect,
   useRef,
   useState,
 } from "react";
+import { api, type ApiAppointmentType, type CreatedAppointment } from "./api";
 
 type IconName =
   | "activity"
@@ -45,6 +47,21 @@ type FormValues = {
 };
 
 type FormField = keyof FormValues;
+
+type DoctorView = {
+  id: string;
+  initials: string;
+  name: string;
+  specialty: string;
+  experience: string;
+  availability: string;
+  status: string;
+  education: string;
+  languages: string;
+  rating: string;
+  hue: string;
+  portrait: string;
+};
 
 const facilities = [
   {
@@ -122,7 +139,7 @@ const services: Array<{
   },
 ];
 
-const doctors = [
+const seedDoctors = [
   {
     id: "voss",
     initials: "LK",
@@ -239,7 +256,7 @@ function Icon({
     strokeWidth: 1.7,
   };
 
-  const paths: Record<IconName, JSX.Element> = {
+  const paths: Record<IconName, ReactElement> = {
     activity: (
       <>
         <path d="M3 12h4l2.2-6 4.1 12 2.1-6H21" />
@@ -388,6 +405,17 @@ function App() {
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [newsletterSent, setNewsletterSent] = useState(false);
   const [heroLight, setHeroLight] = useState({ x: 72, y: 44 });
+  const [doctorList, setDoctorList] = useState<DoctorView[]>(seedDoctors);
+  const [appointmentTypes, setAppointmentTypes] = useState<ApiAppointmentType[]>([]);
+  const [booked, setBooked] = useState<CreatedAppointment | null>(null);
+  const [bookedSummary, setBookedSummary] = useState<{
+    firstName: string;
+    appointmentType: string;
+    doctorName: string;
+    preferredDate: string;
+    preferredTime: string;
+  } | null>(null);
+  const [submitError, setSubmitError] = useState("");
   const confirmationDialog = useRef<HTMLDivElement>(null);
   const submitButton = useRef<HTMLButtonElement>(null);
 
@@ -406,6 +434,45 @@ function App() {
 
     document.querySelectorAll(".reveal").forEach((element) => observer.observe(element));
     return () => observer.disconnect();
+  }, []);
+
+  // Hydrate clinicians + appointment types from the MySQL-backed API.
+  // If the backend is offline, the static seed data keeps the page usable.
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([api.doctors(), api.appointmentTypes()])
+      .then(([rows, types]) => {
+        if (cancelled) return;
+
+        setDoctorList(
+          rows.map((row) => {
+            const local = seedDoctors.find((doctor) => doctor.id === row.id);
+            return {
+              id: row.id,
+              initials: row.initials,
+              name: row.name,
+              specialty: row.specialty,
+              experience: row.experience ?? local?.experience ?? "",
+              availability: row.availability_note ?? local?.availability ?? "",
+              status: row.status,
+              education: row.education ?? local?.education ?? "",
+              languages: row.languages ?? local?.languages ?? "",
+              rating: `${Number(row.rating).toFixed(1)} clinical rating`,
+              hue: row.hue ?? local?.hue ?? "teal",
+              portrait: local?.portrait ?? row.portrait_url ?? "",
+            };
+          }),
+        );
+        setAppointmentTypes(types);
+      })
+      .catch(() => {
+        /* backend offline — keep static fallback */
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -444,7 +511,7 @@ function App() {
     document.getElementById("appointment")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const submitAppointment = (event: FormEvent<HTMLFormElement>) => {
+  const submitAppointment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextErrors = Object.keys(formValues).reduce<Partial<Record<FormField, string>>>(
       (collectedErrors, field) => {
@@ -476,14 +543,52 @@ function App() {
     }
 
     setIsSubmitting(true);
-    window.setTimeout(() => {
-      setIsSubmitting(false);
+    setSubmitError("");
+
+    try {
+      const created = await api.createAppointment({
+        fullName: formValues.fullName.trim(),
+        dob: formValues.dob,
+        email: formValues.email.trim(),
+        phone: formValues.phone.trim(),
+        appointmentType: formValues.appointmentType,
+        doctor: formValues.doctor,
+        preferredDate: formValues.preferredDate,
+        preferredTime: formValues.preferredTime,
+        reason: formValues.reason.trim(),
+        emergencyName: formValues.emergencyName.trim(),
+        emergencyPhone: formValues.emergencyPhone.trim(),
+        notes: formValues.notes.trim(),
+      });
+
+      setBooked(created);
+      setBookedSummary({
+        firstName: formValues.fullName.trim().split(" ")[0] || "patient",
+        appointmentType: formValues.appointmentType,
+        doctorName:
+          doctorList.find((doctor) => doctor.id === formValues.doctor)?.name ??
+          "Assignment pending",
+        preferredDate: formValues.preferredDate,
+        preferredTime: formValues.preferredTime,
+      });
       setIsConfirmed(true);
-    }, 900);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "The intake service is unreachable. Please try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const closeConfirmation = () => {
     setIsConfirmed(false);
+    setFormValues(initialForm);
+    setTouched({});
+    setErrors({});
+    setSubmitError("");
     window.setTimeout(() => submitButton.current?.focus(), 0);
   };
 
@@ -517,8 +622,6 @@ function App() {
     "--light-x": `${heroLight.x}%`,
     "--light-y": `${heroLight.y}%`,
   } as CSSProperties;
-
-  const selectedDoctor = doctors.find((doctor) => doctor.id === formValues.doctor);
 
   return (
     <div className="site-shell">
@@ -804,11 +907,23 @@ function App() {
                     onBlur={() => touchField("appointmentType")}
                   >
                     <option value="">Select type</option>
-                    <option value="Emergency intake">Emergency intake</option>
-                    <option value="Surgical consultation">Surgical consultation</option>
-                    <option value="Diagnostic assessment">Diagnostic assessment</option>
-                    <option value="Specialist consultation">Specialist consultation</option>
-                    <option value="Routine check-up">Routine check-up</option>
+                    {appointmentTypes.length
+                      ? appointmentTypes.map((type) => (
+                          <option key={type.id} value={type.name}>
+                            {type.name}
+                          </option>
+                        ))
+                      : [
+                          "Emergency intake",
+                          "Surgical consultation",
+                          "Diagnostic assessment",
+                          "Specialist consultation",
+                          "Routine check-up",
+                        ].map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
                   </select>
                 </FormFieldWrapper>
                 <FormFieldWrapper
@@ -824,7 +939,7 @@ function App() {
                     onBlur={() => touchField("doctor")}
                   >
                     <option value="">Select clinician</option>
-                    {doctors.map((doctor) => (
+                    {doctorList.map((doctor) => (
                       <option key={doctor.id} value={doctor.id}>
                         {doctor.name} · {doctor.specialty}
                       </option>
@@ -931,7 +1046,7 @@ function App() {
                 <p aria-live="polite" className="form-live-message">
                   {Object.values(errors).some(Boolean)
                     ? "Please review the highlighted fields before confirming."
-                    : ""}
+                    : submitError}
                 </p>
                 <button
                   ref={submitButton}
@@ -970,7 +1085,7 @@ function App() {
             </p>
           </div>
           <div className="doctor-grid">
-            {doctors.map((doctor, index) => (
+            {doctorList.map((doctor, index) => (
               <article
                 className={`doctor-card reveal doctor-${doctor.hue}`}
                 key={doctor.id}
@@ -1139,9 +1254,21 @@ function App() {
             <h3>Clinical dispatch</h3>
             <p>Receive facility updates and care notes.</p>
             <form
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault();
-                setNewsletterSent(true);
+                const input = event.currentTarget.querySelector<HTMLInputElement>(
+                  "#newsletter-email",
+                );
+                const email = input?.value.trim() ?? "";
+                if (!email) return;
+
+                try {
+                  await api.subscribeNewsletter(email);
+                  setNewsletterSent(true);
+                  if (input) input.value = "";
+                } catch {
+                  setNewsletterSent(false);
+                }
               }}
             >
               <label className="sr-only" htmlFor="newsletter-email">
@@ -1192,28 +1319,35 @@ function App() {
             <div className="confirmation-symbol">
               <Icon name="check" />
             </div>
-            <p className="eyebrow">Request received / case 093</p>
+            <p className="eyebrow">
+              Request received / case {booked?.appointmentNumber ?? "pending"}
+            </p>
             <h2 id="confirmation-title">
               Appointment <em>secured.</em>
             </h2>
             <p>
-              Thank you, {formValues.fullName.split(" ")[0]}. A clinical coordinator will confirm
-              the final details of your requested visit.
+              Thank you, {bookedSummary?.firstName ?? "patient"}. A clinical coordinator will
+              confirm the final details of your requested visit.
             </p>
             <dl className="confirmation-details">
               <div>
                 <dt>Requested care</dt>
-                <dd>{formValues.appointmentType}</dd>
+                <dd>{bookedSummary?.appointmentType ?? "Pending"}</dd>
               </div>
               <div>
                 <dt>Preferred clinician</dt>
-                <dd>{selectedDoctor?.name ?? "Assignment pending"}</dd>
+                <dd>{bookedSummary?.doctorName ?? "Assignment pending"}</dd>
               </div>
               <div>
                 <dt>Date & time</dt>
                 <dd>
-                  {formatDate(formValues.preferredDate)} · {formValues.preferredTime}
+                  {formatDate(bookedSummary?.preferredDate ?? "")} ·{" "}
+                  {bookedSummary?.preferredTime ?? "Pending"}
                 </dd>
+              </div>
+              <div>
+                <dt>Confirmation code</dt>
+                <dd>{booked?.confirmationCode ?? "Pending"}</dd>
               </div>
             </dl>
             <div className="confirmation-actions">
