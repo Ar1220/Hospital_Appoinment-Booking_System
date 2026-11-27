@@ -153,7 +153,19 @@ mysql-project/
 
 ---
 
-## 6. Screenshots
+## 6. Demo video
+
+A full run through the product: landing page → facility gallery → services → patient intake form with
+live validation → **appointment secured** dialog with the real `APT-…` number issued by MySQL.
+Plays on its own, on loop.
+
+![Requiem Medical Center demo — booking an appointment end to end](docs/media/requiem-demo.gif)
+
+Full-length recording with sound (81 s, 1280p): **[docs/media/requiem-demo.mp4](docs/media/requiem-demo.mp4)**
+
+---
+
+## 7. Screenshots
 
 Full-resolution captures of the running site.
 
@@ -177,7 +189,7 @@ Full-resolution captures of the running site.
 
 ---
 
-## 7. Verification status
+## 8. Verification status
 
 - `tsc -p tsconfig.json --noEmit` → clean
 - `npm run build` → builds (250 kB JS / 43 kB CSS)
@@ -188,7 +200,7 @@ Full-resolution captures of the running site.
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
