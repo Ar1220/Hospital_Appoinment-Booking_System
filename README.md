@@ -161,7 +161,9 @@ Plays on its own, on loop.
 
 ![Requiem Medical Center demo — booking an appointment end to end](docs/media/requiem-demo.gif)
 
-Full-length recording with sound (81 s, 1280p): **[docs/media/requiem-demo.mp4](docs/media/requiem-demo.mp4)**
+The preview above is a cropped, compressed GIF — GIF is the only format GitHub autoplays. For the real
+thing, watch **full quality (1280p, with sound, 81 s):
+[docs/media/requiem-demo.mp4](docs/media/requiem-demo.mp4)**.
 
 ---
 
