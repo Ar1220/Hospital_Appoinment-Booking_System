@@ -52,12 +52,15 @@ app.get('/api/health', async (req, res) => {
 // APPOINTMENT ROUTES
 // =====================================================
 
-// Generate appointment number
-async function generateAppointmentNumber() {
-    const [rows] = await pool.execute(
-        `SELECT CONCAT('APT-', YEAR(CURDATE()), '-', MONTH(CURDATE()), '-', 
-           LPAD(COALESCE(COUNT(*), 0) + 1, 5, '0')) as new_number
-         FROM appointments 
+// Generate appointment number — based on the highest serial used this month,
+// not on a row count (deleting rows must never recycle a number).
+async function generateAppointmentNumber(connection = pool) {
+    const [rows] = await connection.execute(
+        `SELECT CONCAT(
+            'APT-', YEAR(CURDATE()), '-', MONTH(CURDATE()), '-',
+            LPAD(COALESCE(MAX(CAST(SUBSTRING_INDEX(appointment_number, '-', -1) AS UNSIGNED)), 0) + 1, 5, '0')
+         ) AS new_number
+         FROM appointments
          WHERE appointment_number LIKE CONCAT('APT-', YEAR(CURDATE()), '-', MONTH(CURDATE()), '-%')`
     );
     return rows[0].new_number;
@@ -97,26 +100,34 @@ app.post('/api/appointments', async (req, res) => {
             }
         }
         
-        // Generate appointment number
-        const appointmentNumber = await generateAppointmentNumber();
-        
         // Generate confirmation code
         const confirmationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-        
-        // Insert appointment
-        const [result] = await connection.execute(
-            `INSERT INTO appointments (
-                appointment_number, full_name, date_of_birth, email, phone,
-                appointment_type_id, doctor_id, preferred_date, preferred_time,
-                reason_for_visit, emergency_contact_name, emergency_contact_phone,
-                additional_notes, status, confirmation_code
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-            [
-                appointmentNumber, fullName, dob, email, phone,
-                appointmentTypeId, doctor, preferredDate, preferredTime,
-                reason, emergencyName, emergencyPhone, notes, confirmationCode
-            ]
-        );
+
+        // Generate appointment number (retry if a concurrent request grabbed it first)
+        let appointmentNumber = null;
+        let result = null;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            const candidate = await generateAppointmentNumber(connection);
+            try {
+                [result] = await connection.execute(
+                    `INSERT INTO appointments (
+                        appointment_number, full_name, date_of_birth, email, phone,
+                        appointment_type_id, doctor_id, preferred_date, preferred_time,
+                        reason_for_visit, emergency_contact_name, emergency_contact_phone,
+                        additional_notes, status, confirmation_code
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+                    [
+                        candidate, fullName, dob, email, phone,
+                        appointmentTypeId, doctor, preferredDate, preferredTime,
+                        reason, emergencyName, emergencyPhone, notes, confirmationCode
+                    ]
+                );
+                appointmentNumber = candidate;
+                break;
+            } catch (insertError) {
+                if (insertError.code !== 'ER_DUP_ENTRY' || attempt === 2) throw insertError;
+            }
+        }
         
         await connection.commit();
         

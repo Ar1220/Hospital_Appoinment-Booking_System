@@ -222,7 +222,7 @@ BEGIN
     SET current_year = DATE_FORMAT(NOW(), '%Y');
     SET current_month = DATE_FORMAT(NOW(), '%m');
     
-    SELECT COUNT(*) INTO counter 
+    SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(appointment_number, '-', -1) AS UNSIGNED)), 0) INTO counter 
     FROM appointments 
     WHERE appointment_number LIKE CONCAT('APT-', current_year, '-', current_month, '-%');
     
